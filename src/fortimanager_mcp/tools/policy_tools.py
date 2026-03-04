@@ -413,6 +413,8 @@ async def update_firewall_policy(
     logtraffic: str | None = None,
     status: str | None = None,
     comments: str | None = None,
+    global_label: str | None = None,
+    global_label_color: int | None = None,
 ) -> dict[str, Any]:
     """Update an existing firewall policy.
 
@@ -434,6 +436,8 @@ async def update_firewall_policy(
         logtraffic: New log mode (optional)
         status: New status (optional)
         comments: New comments (optional)
+        global_label: Policy section label (optional)
+        global_label_color: Policy section color ID 0-31 (optional)
 
     Returns:
         dict: Update result with keys:
@@ -487,6 +491,10 @@ async def update_firewall_policy(
             data["status"] = status
         if comments is not None:
             data["comments"] = comments
+        if global_label is not None:
+            data["global-label"] = global_label
+        if global_label_color is not None:
+            data["_global-label-color"] = global_label_color
 
         if not data:
             return {"status": "error", "message": "No update parameters provided"}
