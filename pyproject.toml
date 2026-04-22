@@ -1,5 +1,5 @@
 [project]
-name = "fortimanager-mcp"
+name = "fortimanager-mcp-ng"
 version = "1.1.0-beta"
 description = "Model Context Protocol server for FortiManager JSON RPC API"
 authors = [
@@ -19,6 +19,7 @@ dependencies = [
 
 [project.scripts]
 fortimanager-mcp = "fortimanager_mcp.server:main"
+fortimanager-mcp-ng = "fortimanager_mcp.server:main"
 
 [project.optional-dependencies]
 dev = [
@@ -35,6 +36,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.metadata]
 allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fortimanager_mcp"]
 
 [tool.ruff]
 line-length = 100

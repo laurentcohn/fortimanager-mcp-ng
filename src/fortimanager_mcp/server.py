@@ -7,6 +7,7 @@ Supports two modes:
 """
 
 import hmac
+import importlib
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -22,14 +23,22 @@ from fortimanager_mcp.utils.config import get_settings
 settings = get_settings()
 
 # Configure logging
-logging.basicConfig(
-    level=getattr(logging, settings.LOG_LEVEL),
-    format=settings.LOG_FORMAT,
-)
+settings.configure_logging()
 logger = logging.getLogger(__name__)
 
 # Global client instance
 _fmg_client: FortiManagerClient | None = None
+
+
+def _health_snapshot() -> dict[str, Any]:
+    """Build a consistent health snapshot for tool and HTTP health checks."""
+    connected = _fmg_client is not None and _fmg_client.is_connected
+    return {
+        "status": "healthy" if connected else "degraded",
+        "service": "fortimanager-mcp-ng",
+        "fortimanager_connected": connected,
+        "tool_mode": settings.FMG_TOOL_MODE,
+    }
 
 
 def get_fmg_client() -> FortiManagerClient | None:
@@ -79,7 +88,7 @@ if settings.MCP_ALLOWED_HOSTS:
 
 # Create FastMCP server with lifespan
 mcp = FastMCP(
-    "fortimanager-mcp",
+    "fortimanager-mcp-ng",
     dependencies=["pyfmg", "pydantic-settings"],
     lifespan=lifespan,
     transport_security=_transport_security,
@@ -90,12 +99,16 @@ mcp = FastMCP(
 @mcp.tool()
 async def health_check() -> str:
     """Check FortiManager MCP server health and connection status."""
-    mode = settings.FMG_TOOL_MODE
-    if mode == "full":
-        tool_info = "All 101 tools loaded"
+    snapshot = _health_snapshot()
+    if snapshot["tool_mode"] == "full":
+        tool_info = "All management tools loaded"
     else:
         tool_info = "Discovery tools + dynamic execution"
-    return f"FortiManager MCP Server is healthy (mode: {mode}, {tool_info})"
+    return (
+        "FortiManager MCP Server is "
+        f"{snapshot['status']} (mode: {snapshot['tool_mode']}, {tool_info}, "
+        f"fortimanager_connected={snapshot['fortimanager_connected']})"
+    )
 
 
 # Dynamic mode: lightweight discovery tools
@@ -323,8 +336,6 @@ def register_dynamic_tools(mcp_server: FastMCP) -> None:
         """
         # Import tools module dynamically
         try:
-            from fortimanager_mcp import tools
-
             # Allowlist of valid tool names (auto-generated from tool modules)
             _TOOL_MODULES = {
                 "system_tools": {
@@ -448,9 +459,8 @@ def register_dynamic_tools(mcp_server: FastMCP) -> None:
             tool_func = None
             for module_name, allowed_names in _TOOL_MODULES.items():
                 if tool_name in allowed_names:
-                    module = getattr(tools, module_name, None)
-                    if module:
-                        tool_func = getattr(module, tool_name, None)
+                    module = importlib.import_module(f"fortimanager_mcp.tools.{module_name}")
+                    tool_func = getattr(module, tool_name, None)
                     break
 
             if not tool_func:
@@ -462,7 +472,8 @@ def register_dynamic_tools(mcp_server: FastMCP) -> None:
             # Execute the tool
             params = parameters or {}
             result = await tool_func(**params)
-            return {"success": True, "result": result}
+            success = not (isinstance(result, dict) and result.get("status") == "error")
+            return {"success": success, "result": result}
 
         except Exception as e:
             return {
@@ -537,14 +548,10 @@ def run_http() -> None:
     # Health check endpoint
     async def health_endpoint(request: Request) -> JSONResponse:
         """HTTP health check endpoint for Docker health checks."""
-        is_connected = _fmg_client is not None
+        snapshot = _health_snapshot()
         return JSONResponse(
-            {
-                "status": "healthy",
-                "service": "fortimanager-mcp",
-                "fortimanager_connected": is_connected,
-            },
-            status_code=200,
+            snapshot,
+            status_code=200 if snapshot["fortimanager_connected"] else 503,
         )
 
     # Auth middleware

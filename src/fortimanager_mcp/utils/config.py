@@ -200,21 +200,37 @@ class Settings(BaseSettings):
         # Set pyFMG logging based on our log level
         logging.getLogger("pyFMG").setLevel(log_level)
 
+    def _build_formatter(self) -> logging.Formatter:
+        """Build a logging formatter, supporting the convenience value 'json'."""
+        log_format = self.LOG_FORMAT
+        if log_format.lower() == "json":
+            log_format = (
+                '{"time":"%(asctime)s","logger":"%(name)s","level":"%(levelname)s",'
+                '"message":"%(message)s"}'
+            )
+
+        try:
+            return logging.Formatter(log_format)
+        except ValueError:
+            fallback = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            return logging.Formatter(fallback)
+
     def _get_log_handlers(self) -> list[logging.Handler]:
         """Get configured log handlers."""
         handlers: list[logging.Handler] = []
+        formatter = self._build_formatter()
 
         # Console handler (always enabled)
         console_handler = logging.StreamHandler()
         console_handler.setLevel(getattr(logging, self.LOG_LEVEL))
-        console_handler.setFormatter(logging.Formatter(self.LOG_FORMAT))
+        console_handler.setFormatter(formatter)
         handlers.append(console_handler)
 
         # File handler (if configured)
         if self.LOG_FILE:
             file_handler = logging.FileHandler(self.LOG_FILE)
             file_handler.setLevel(getattr(logging, self.LOG_LEVEL))
-            file_handler.setFormatter(logging.Formatter(self.LOG_FORMAT))
+            file_handler.setFormatter(formatter)
             handlers.append(file_handler)
 
         return handlers
