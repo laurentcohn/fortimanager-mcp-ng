@@ -10,9 +10,9 @@ from pyFMG.fortimgr import FortiManager
 
 from fortimanager_mcp.utils.config import Settings
 from fortimanager_mcp.utils.errors import (
-    APIError,
     AuthenticationError,
     ConnectionError,
+    parse_fmg_error,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,21 +50,6 @@ def _sanitize_for_logging(data: Any, depth: int = 0) -> Any:
     elif isinstance(data, list):
         return [_sanitize_for_logging(item, depth + 1) for item in data]
     return data
-
-
-def parse_fmg_error(code: int, message: str, operation: str = "") -> APIError:
-    """Parse FortiManager error code and return appropriate exception."""
-    error_map = {
-        -1: "General error",
-        -2: "Invalid parameters",
-        -3: "Object not found",
-        -6: "Object already exists",
-        -10: "Invalid session",
-        -11: "No permission",
-    }
-    base_msg = error_map.get(code, f"Unknown error (code {code})")
-    full_msg = f"{operation}: {base_msg} - {message}" if operation else f"{base_msg} - {message}"
-    return APIError(full_msg)
 
 
 class FortiManagerClient:
@@ -252,7 +237,7 @@ class FortiManagerClient:
         else:
             error_msg = str(response)
 
-        raise parse_fmg_error(code, error_msg, operation)
+        raise parse_fmg_error(code, error_msg, url=operation)
 
     # =========================================================================
     # Generic Operations
@@ -1295,7 +1280,7 @@ class FortiManagerClient:
         Uses version-aware endpoint (see list_scripts).
         """
         await self._detect_version()
-        return await self.update(f"{self._script_base_url(adom)}/{name}", data=data)
+        return await self.update(f"{self._script_base_url(adom)}/{name}", **data)
 
     async def delete_script(
         self,
