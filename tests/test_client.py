@@ -5,7 +5,12 @@ from unittest.mock import MagicMock
 import pytest
 
 from fortimanager_mcp.api.client import FortiManagerClient, parse_fmg_error
-from fortimanager_mcp.utils.errors import APIError, ConnectionError
+from fortimanager_mcp.utils.errors import (
+    APIError,
+    ConnectionError,
+    FortiManagerMCPError,
+    ResourceNotFoundError,
+)
 
 
 class TestClientInitialization:
@@ -137,16 +142,19 @@ class TestErrorHandling:
     """Test error handling."""
 
     def test_parse_fmg_error_known_code(self) -> None:
-        """Test parsing known error codes."""
-        error = parse_fmg_error(-3, "Not found", "GET /test")
-        assert isinstance(error, APIError)
-        assert "Object not found" in str(error)
+        """Known codes map to the specific exception subclass for that code."""
+        error = parse_fmg_error(-4, "Not found", "GET /test")
+        assert isinstance(error, ResourceNotFoundError)
+        assert isinstance(error, FortiManagerMCPError)
+        assert "Requested resource not found" in str(error)
+        assert error.code == -4
 
     def test_parse_fmg_error_unknown_code(self) -> None:
-        """Test parsing unknown error codes."""
+        """Unknown codes fall back to the generic APIError with the code recorded."""
         error = parse_fmg_error(-999, "Unknown error", "GET /test")
         assert isinstance(error, APIError)
-        assert "-999" in str(error)
+        assert error.code == -999
+        assert "Unknown error" in str(error)
 
     @pytest.mark.asyncio
     async def test_handle_error_response(
@@ -154,10 +162,10 @@ class TestErrorHandling:
         mock_client: FortiManagerClient,
         mock_fmg_instance: MagicMock,
     ) -> None:
-        """Test handling error responses from API."""
-        mock_fmg_instance.get.return_value = (-3, {"status": {"message": "Not found"}})
+        """API error responses surface as the mapped exception subclass."""
+        mock_fmg_instance.get.return_value = (-4, {"status": {"message": "Not found"}})
 
-        with pytest.raises(APIError) as exc_info:
+        with pytest.raises(ResourceNotFoundError) as exc_info:
             await mock_client.get("/test/url")
 
-        assert "Object not found" in str(exc_info.value)
+        assert "Requested resource not found" in str(exc_info.value)
