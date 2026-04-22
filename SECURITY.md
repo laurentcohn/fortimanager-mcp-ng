@@ -13,7 +13,7 @@ If you discover a security vulnerability in this project, please report it respo
 
 **Do NOT open a public GitHub issue for security vulnerabilities.**
 
-Instead, please email: **roland@mystier.li**
+Instead, please email: **laurent.cohn@gmail.com**
 
 Include:
 - Description of the vulnerability
@@ -39,5 +39,5 @@ This security policy covers the MCP server code in this repository. It does NOT 
 When using this MCP server:
 - Use API tokens with minimum required permissions
 - Store credentials in environment variables, never in code
-- Use `ALLOWED_OUTPUT_DIRS` to restrict file output locations
+- Use `FMG_ALLOWED_OUTPUT_DIRS` to restrict file output locations
 - Run in Docker for additional isolation
