@@ -35,7 +35,7 @@ This fork keeps the upstream feature set but fixes a few issues that block real 
 ## Quick start
 
 ```bash
-git clone https://github.com/<your-user>/fortimanager-mcp-ng.git
+git clone https://github.com/laurentcohn/fortimanager-mcp-ng.git
 cd fortimanager-mcp-ng
 
 uv venv
@@ -69,7 +69,7 @@ The legacy alias `fortimanager-mcp` is still installed for compatibility, but `f
 ### Option 1: `uv` (recommended)
 
 ```bash
-git clone https://github.com/<your-user>/fortimanager-mcp-ng.git
+git clone https://github.com/laurentcohn/fortimanager-mcp-ng.git
 cd fortimanager-mcp-ng
 
 uv venv
@@ -80,7 +80,7 @@ uv sync
 ### Option 2: `pip`
 
 ```bash
-git clone https://github.com/<your-user>/fortimanager-mcp-ng.git
+git clone https://github.com/laurentcohn/fortimanager-mcp-ng.git
 cd fortimanager-mcp-ng
 
 python -m venv .venv
