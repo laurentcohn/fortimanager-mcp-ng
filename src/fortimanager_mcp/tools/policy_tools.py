@@ -10,6 +10,8 @@ import logging
 from typing import Any
 
 from fortimanager_mcp.server import get_fmg_client, mcp
+from fortimanager_mcp.utils.config import get_settings
+from fortimanager_mcp.utils.validation import check_policy_permissiveness
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +22,37 @@ def _get_client():
     if not client:
         raise RuntimeError("FortiManager client not initialized")
     return client
+
+
+def _check_policy_safety(
+    srcaddr: list[str] | None,
+    dstaddr: list[str] | None,
+    service: list[str] | None,
+    action: str | None,
+) -> dict[str, Any] | None:
+    """Check policy permissiveness based on safety config.
+
+    Returns error dict (strict), warning dict (warn), or None (OK/disabled).
+    """
+    settings = get_settings()
+    if settings.FMG_POLICY_SAFETY == "disabled":
+        return None
+
+    warning = check_policy_permissiveness(srcaddr, dstaddr, service, action)
+    if not warning:
+        return None
+
+    if settings.FMG_POLICY_SAFETY == "strict":
+        logger.warning(f"Policy blocked — {warning}")
+        return {
+            "status": "error",
+            "message": f"Policy blocked: {warning} "
+            "Set FMG_POLICY_SAFETY=warn or FMG_POLICY_SAFETY=disabled to override.",
+        }
+
+    # warn mode — return marker for caller to attach warning to success response
+    logger.warning(f"Policy warning — {warning}")
+    return {"_safety_warning": warning}
 
 
 # =============================================================================
@@ -363,6 +396,18 @@ async def create_firewall_policy(
         ...     nat=True
         ... )
     """
+    # Safety check for overly permissive policies
+    safety_warning = None
+    safety_result = _check_policy_safety(srcaddr, dstaddr, service, action)
+    if safety_result:
+        if safety_result.get("status") == "error":
+            return safety_result
+        safety_warning = safety_result.get("_safety_warning")
+
+    # FortiManager rejects logtraffic=utm on deny policies
+    if action == "deny" and logtraffic == "utm":
+        logtraffic = "all"
+
     try:
         client = _get_client()
 
@@ -387,11 +432,14 @@ async def create_firewall_policy(
 
         result = await client.create_firewall_policy(adom, package, policy)
 
-        return {
+        response = {
             "status": "success",
             "policyid": result.get("policyid", policyid),
             "message": f"Policy {name} created successfully",
         }
+        if safety_warning:
+            response["warning"] = safety_warning
+        return response
     except Exception as e:
         logger.error(f"Failed to create policy {name}: {e}")
         return {"status": "error", "message": str(e)}
@@ -463,6 +511,16 @@ async def update_firewall_policy(
         ...     srcaddr=["New-Subnet", "Other-Subnet"]
         ... )
     """
+    # Safety check — only when all critical fields are explicitly provided.
+    # For partial updates we can't know existing values without an extra API call.
+    safety_warning = None
+    if srcaddr is not None and dstaddr is not None and action is not None:
+        safety_result = _check_policy_safety(srcaddr, dstaddr, service, action)
+        if safety_result:
+            if safety_result.get("status") == "error":
+                return safety_result
+            safety_warning = safety_result.get("_safety_warning")
+
     try:
         client = _get_client()
 
@@ -502,11 +560,14 @@ async def update_firewall_policy(
 
         await client.update_firewall_policy(adom, package, policyid, data)
 
-        return {
+        response = {
             "status": "success",
             "policyid": policyid,
             "message": f"Policy {policyid} updated successfully",
         }
+        if safety_warning:
+            response["warning"] = safety_warning
+        return response
     except Exception as e:
         logger.error(f"Failed to update policy {policyid}: {e}")
         return {"status": "error", "message": str(e)}

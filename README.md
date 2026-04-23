@@ -176,6 +176,10 @@ DEFAULT_ADOM=root
 # Required when running behind a reverse proxy (e.g., Traefik, nginx).
 # The MCP SDK rejects non-localhost Host headers by default for DNS rebinding protection.
 # MCP_ALLOWED_HOSTS=["mcp.example.com"]
+
+# Safety Guardrails (optional - strict by default)
+# FMG_SCRIPT_SAFETY=strict    # Block dangerous CLI commands in scripts (factory-reset, reboot, etc.)
+# FMG_POLICY_SAFETY=strict    # Block overly permissive policies (srcaddr=all + dstaddr=all + accept)
 ```
 
 ### Tool Loading Modes
@@ -766,6 +770,39 @@ In dynamic mode, the tool dispatcher validates tool names:
 - Rejects private/internal functions (underscore-prefixed names)
 - Validates that resolved attributes are callable
 - Error responses never include request parameters (prevents credential leakage)
+
+### Safety Guardrails
+
+The MCP server includes built-in safety checks to prevent accidental damage to managed infrastructure. Both are **enabled by default**.
+
+#### Script Content Safety (`FMG_SCRIPT_SAFETY`)
+
+Blocks dangerous CLI commands in `create_script` and `update_script`:
+
+| Blocked Command | Risk |
+|----------------|------|
+| `execute factory-reset` | Wipes device configuration |
+| `execute reboot` | Causes device outage |
+| `execute shutdown` | Powers off device |
+| `execute format` | Formats device disk |
+| `execute erase-disk` | Erases device disk |
+
+Handles FortiOS abbreviations (`exec` for `execute`) and case variations.
+
+```bash
+FMG_SCRIPT_SAFETY=strict    # Default: block dangerous commands
+FMG_SCRIPT_SAFETY=disabled  # Allow all commands (use with extreme caution)
+```
+
+#### Policy Permissiveness Safety (`FMG_POLICY_SAFETY`)
+
+Blocks overly permissive firewall policies in `create_firewall_policy` and `update_firewall_policy`. Detects policies where `srcaddr=all` + `dstaddr=all` + `action=accept`, which allows unrestricted traffic.
+
+```bash
+FMG_POLICY_SAFETY=strict    # Default: block overly permissive policies
+FMG_POLICY_SAFETY=warn      # Allow but include warning in response
+FMG_POLICY_SAFETY=disabled  # Allow all policies
+```
 
 ### General Security
 
