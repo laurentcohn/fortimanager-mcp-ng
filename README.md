@@ -10,6 +10,8 @@ A Model Context Protocol (MCP) server for FortiManager JSON-RPC API. This server
 
 > **Note**: This is an independent open-source project and is not affiliated with, endorsed by, or supported by Fortinet, Inc. FortiManager is a trademark of Fortinet, Inc.
 
+> **Disclaimer:** This MCP server can create, modify, and delete configurations on FortiManager. Misuse or misconfiguration can impact production networks. Use at your own risk. Always test in a non-production environment first and ensure appropriate ADOM permissions are configured.
+
 ## Overview
 
 This MCP server provides a comprehensive interface to FortiManager's capabilities, allowing AI assistants to:

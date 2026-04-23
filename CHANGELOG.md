@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1-beta] - 2026-04-23
+
+### Fixed
+- Consolidated duplicate `parse_fmg_error` — removed simple version from client.py, now uses the comprehensive version from errors.py
+
+### Added
+- Usage disclaimer in README
+
 ## [1.2.0-beta] - 2026-04-23
 
 ### Added
