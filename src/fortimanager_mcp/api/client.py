@@ -237,7 +237,7 @@ class FortiManagerClient:
         else:
             error_msg = str(response)
 
-        raise parse_fmg_error(code, error_msg, operation)
+        raise parse_fmg_error(code, error_msg, url=operation)
 
     # =========================================================================
     # Generic Operations
@@ -1280,7 +1280,7 @@ class FortiManagerClient:
         Uses version-aware endpoint (see list_scripts).
         """
         await self._detect_version()
-        return await self.update(f"{self._script_base_url(adom)}/{name}", data=data)
+        return await self.update(f"{self._script_base_url(adom)}/{name}", **data)
 
     async def delete_script(
         self,

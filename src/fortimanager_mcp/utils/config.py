@@ -25,8 +25,8 @@ class Settings(BaseSettings):
     )
 
     # FortiManager Connection
-    FORTIMANAGER_HOST: str = Field(
-        ...,
+    FORTIMANAGER_HOST: str | None = Field(
+        default=None,
         description="FortiManager hostname or IP address",
     )
 
@@ -165,10 +165,15 @@ class Settings(BaseSettings):
 
     @field_validator("FORTIMANAGER_HOST")
     @classmethod
-    def validate_host(cls, v: str) -> str:
-        """Validate FortiManager host."""
-        if not v:
-            raise ValueError("FORTIMANAGER_HOST cannot be empty")
+    def validate_host(cls, v: str | None) -> str | None:
+        """Validate FortiManager host.
+
+        Returns None if unset so the server can start in a degraded state
+        (startup checks in server.py surface a clear error instead of a
+        Pydantic validation failure).
+        """
+        if v is None or v == "":
+            return None
         # Remove protocol if present
         v = v.replace("https://", "").replace("http://", "")
         # Remove trailing slash
@@ -196,6 +201,8 @@ class Settings(BaseSettings):
     @property
     def base_url(self) -> str:
         """Get FortiManager base URL."""
+        if not self.FORTIMANAGER_HOST:
+            raise RuntimeError("FORTIMANAGER_HOST is not configured")
         return f"https://{self.FORTIMANAGER_HOST}/jsonrpc"
 
     def configure_logging(self) -> None:
