@@ -3,7 +3,9 @@
 Based on FNDN FortiManager 7.6.5 API specifications.
 """
 
+import asyncio
 import logging
+import threading
 from typing import Any
 
 from pyFMG.fortimgr import FortiManager
@@ -83,8 +85,18 @@ class FortiManagerClient:
         self._fmg: FortiManager | None = None
         self._connected = False
         self._fmg_version: tuple[int, int, int] | None = None  # (major, minor, patch)
+        self._io_lock = threading.Lock()
 
         logger.info(f"Initialized FortiManager client for {self.host}")
+
+    def _run_blocking(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        """Serialize blocking pyFMG I/O away from the event loop."""
+        with self._io_lock:
+            return func(*args, **kwargs)
+
+    async def _call_blocking(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        """Run blocking appliance I/O in a worker thread."""
+        return await asyncio.to_thread(self._run_blocking, func, *args, **kwargs)
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "FortiManagerClient":
@@ -133,7 +145,7 @@ class FortiManagerClient:
                     "No authentication provided. Set API token or username/password."
                 )
 
-            code, response = self._fmg.login()
+            code, response = await self._call_blocking(self._fmg.login)
 
             if code != 0:
                 error_msg = response.get("status", {}).get("message", "Login failed")
@@ -156,7 +168,7 @@ class FortiManagerClient:
         logger.info("Disconnecting from FortiManager")
 
         try:
-            self._fmg.logout()
+            await self._call_blocking(self._fmg.logout)
         except Exception as e:
             logger.warning(f"Logout failed: {e}")
         finally:
@@ -246,37 +258,37 @@ class FortiManagerClient:
     async def get(self, url: str, **kwargs: Any) -> Any:
         """Execute GET request."""
         fmg = self._ensure_connected()
-        code, response = fmg.get(url, **kwargs)
+        code, response = await self._call_blocking(fmg.get, url, **kwargs)
         return self._handle_response(code, response, f"GET {url}")
 
     async def add(self, url: str, **kwargs: Any) -> Any:
         """Execute ADD request."""
         fmg = self._ensure_connected()
-        code, response = fmg.add(url, **kwargs)
+        code, response = await self._call_blocking(fmg.add, url, **kwargs)
         return self._handle_response(code, response, f"ADD {url}")
 
     async def set(self, url: str, **kwargs: Any) -> Any:
         """Execute SET request."""
         fmg = self._ensure_connected()
-        code, response = fmg.set(url, **kwargs)
+        code, response = await self._call_blocking(fmg.set, url, **kwargs)
         return self._handle_response(code, response, f"SET {url}")
 
     async def update(self, url: str, **kwargs: Any) -> Any:
         """Execute UPDATE request."""
         fmg = self._ensure_connected()
-        code, response = fmg.update(url, **kwargs)
+        code, response = await self._call_blocking(fmg.update, url, **kwargs)
         return self._handle_response(code, response, f"UPDATE {url}")
 
     async def delete(self, url: str, **kwargs: Any) -> Any:
         """Execute DELETE request."""
         fmg = self._ensure_connected()
-        code, response = fmg.delete(url, **kwargs)
+        code, response = await self._call_blocking(fmg.delete, url, **kwargs)
         return self._handle_response(code, response, f"DELETE {url}")
 
     async def execute(self, url: str, **kwargs: Any) -> Any:
         """Execute EXEC request."""
         fmg = self._ensure_connected()
-        code, response = fmg.execute(url, **kwargs)
+        code, response = await self._call_blocking(fmg.execute, url, **kwargs)
         return self._handle_response(code, response, f"EXEC {url}")
 
     async def move(self, url: str, option: str, target: str) -> Any:
@@ -289,7 +301,9 @@ class FortiManagerClient:
         """
         fmg = self._ensure_connected()
         # Pass as dict in args (not kwargs) so it merges at top level, not in 'data'
-        code, response = fmg.move(url, {"option": option, "target": target})
+        code, response = await self._call_blocking(
+            fmg.move, url, {"option": option, "target": target}
+        )
         return self._handle_response(code, response, f"MOVE {url}")
 
     # =========================================================================

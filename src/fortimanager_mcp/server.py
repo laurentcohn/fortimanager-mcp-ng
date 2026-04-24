@@ -46,6 +46,24 @@ def get_fmg_client() -> FortiManagerClient | None:
     return _fmg_client
 
 
+def _tool_result_success(result: Any) -> bool:
+    """Normalize tool results to a single success/failure signal."""
+    if not isinstance(result, dict):
+        return True
+
+    if "error" in result:
+        return False
+
+    status = result.get("status")
+    if isinstance(status, str) and status.lower() == "error":
+        return False
+
+    if result.get("success") is False:
+        return False
+
+    return True
+
+
 @asynccontextmanager
 async def lifespan(server: FastMCP) -> AsyncIterator[None]:
     """Manage server lifecycle - connect/disconnect FortiManager client."""
@@ -472,8 +490,7 @@ def register_dynamic_tools(mcp_server: FastMCP) -> None:
             # Execute the tool
             params = parameters or {}
             result = await tool_func(**params)
-            success = not (isinstance(result, dict) and result.get("status") == "error")
-            return {"success": success, "result": result}
+            return {"success": _tool_result_success(result), "result": result}
 
         except Exception as e:
             return {

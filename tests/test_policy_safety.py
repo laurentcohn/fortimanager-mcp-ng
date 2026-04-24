@@ -160,8 +160,10 @@ class TestPolicyToolSafetyStrict:
         assert "blocked" in result["message"].lower()
 
     @pytest.mark.asyncio
-    async def test_update_policy_partial_fields_not_checked(self, monkeypatch):
-        """Partial update with only srcaddr should not trigger safety check."""
+    async def test_update_policy_partial_fields_blocked_after_merging_current_state(
+        self, monkeypatch
+    ):
+        """Partial updates should be evaluated against the current effective policy."""
         monkeypatch.setenv("FORTIMANAGER_HOST", "test.example.com")
         monkeypatch.setenv("FMG_POLICY_SAFETY", "strict")
 
@@ -169,12 +171,51 @@ class TestPolicyToolSafetyStrict:
 
         with patch("fortimanager_mcp.tools.policy_tools.get_fmg_client") as mock_client:
             mock_client.return_value = AsyncMock()
-            mock_client.return_value.update_firewall_policy = AsyncMock(return_value={})
+            mock_client.return_value.get_firewall_policy = AsyncMock(
+                return_value={
+                    "policyid": 10,
+                    "srcaddr": ["LAN-Subnet"],
+                    "dstaddr": ["all"],
+                    "service": ["ALL"],
+                    "action": "accept",
+                }
+            )
             result = await update_firewall_policy(
                 adom="root",
                 package="default",
                 policyid=10,
                 srcaddr=["all"],
+            )
+
+        assert result["status"] == "error"
+        assert "blocked" in result["message"].lower()
+        mock_client.return_value.update_firewall_policy.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_update_policy_partial_fields_pass_when_effective_policy_safe(self, monkeypatch):
+        """Partial updates should still pass when the merged policy stays specific."""
+        monkeypatch.setenv("FORTIMANAGER_HOST", "test.example.com")
+        monkeypatch.setenv("FMG_POLICY_SAFETY", "strict")
+
+        from fortimanager_mcp.tools.policy_tools import update_firewall_policy
+
+        with patch("fortimanager_mcp.tools.policy_tools.get_fmg_client") as mock_client:
+            mock_client.return_value = AsyncMock()
+            mock_client.return_value.get_firewall_policy = AsyncMock(
+                return_value={
+                    "policyid": 10,
+                    "srcaddr": ["LAN-Subnet"],
+                    "dstaddr": ["Server-Net"],
+                    "service": ["HTTPS"],
+                    "action": "accept",
+                }
+            )
+            mock_client.return_value.update_firewall_policy = AsyncMock(return_value={})
+            result = await update_firewall_policy(
+                adom="root",
+                package="default",
+                policyid=10,
+                srcaddr=["Branch-LAN"],
             )
 
         assert result["status"] == "success"

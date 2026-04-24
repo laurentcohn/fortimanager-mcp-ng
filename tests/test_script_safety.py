@@ -173,6 +173,50 @@ class TestScriptToolSafetyStrict:
         assert "error" not in result
         assert result.get("success") is True
 
+    @pytest.mark.asyncio
+    async def test_execute_script_blocked_when_stored_script_is_dangerous(self, monkeypatch):
+        monkeypatch.setenv("FORTIMANAGER_HOST", "test.example.com")
+        monkeypatch.setenv("FMG_SCRIPT_SAFETY", "strict")
+
+        from fortimanager_mcp.tools.script_tools import execute_script_on_device
+
+        with patch("fortimanager_mcp.tools.script_tools.get_fmg_client") as mock_client:
+            mock_client.return_value = AsyncMock()
+            mock_client.return_value.get_script = AsyncMock(
+                return_value={"name": "dangerous", "content": "execute reboot"}
+            )
+            result = await execute_script_on_device(
+                adom="root",
+                script="dangerous",
+                device="FGT-01",
+            )
+
+        assert "error" in result
+        assert "dangerous commands" in result["error"]
+        mock_client.return_value.execute_script.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_execute_script_passes_when_stored_script_is_safe(self, monkeypatch):
+        monkeypatch.setenv("FORTIMANAGER_HOST", "test.example.com")
+        monkeypatch.setenv("FMG_SCRIPT_SAFETY", "strict")
+
+        from fortimanager_mcp.tools.script_tools import execute_script_on_device
+
+        with patch("fortimanager_mcp.tools.script_tools.get_fmg_client") as mock_client:
+            mock_client.return_value = AsyncMock()
+            mock_client.return_value.get_script = AsyncMock(
+                return_value={"name": "safe", "content": "execute ping 8.8.8.8"}
+            )
+            mock_client.return_value.execute_script = AsyncMock(return_value={"task": 123})
+            result = await execute_script_on_device(
+                adom="root",
+                script="safe",
+                device="FGT-01",
+            )
+
+        assert result.get("success") is True
+        mock_client.return_value.execute_script.assert_called_once()
+
 
 class TestScriptToolSafetyDisabled:
     """Test that dangerous scripts pass through when safety is disabled."""
@@ -195,3 +239,27 @@ class TestScriptToolSafetyDisabled:
 
         assert result.get("success") is True
         mock_client.return_value.create_script.assert_called_once()
+
+
+class TestScriptExecutionSafetyDisabled:
+    """Execution should still be allowed when script safety is disabled."""
+
+    @pytest.mark.asyncio
+    async def test_execute_dangerous_script_allowed_when_disabled(self, monkeypatch):
+        monkeypatch.setenv("FORTIMANAGER_HOST", "test.example.com")
+        monkeypatch.setenv("FMG_SCRIPT_SAFETY", "disabled")
+
+        from fortimanager_mcp.tools.script_tools import execute_script_on_device
+
+        with patch("fortimanager_mcp.tools.script_tools.get_fmg_client") as mock_client:
+            mock_client.return_value = AsyncMock()
+            mock_client.return_value.execute_script = AsyncMock(return_value={"task": 456})
+            result = await execute_script_on_device(
+                adom="root",
+                script="dangerous",
+                device="FGT-01",
+            )
+
+        assert result.get("success") is True
+        mock_client.return_value.get_script.assert_not_called()
+        mock_client.return_value.execute_script.assert_called_once()

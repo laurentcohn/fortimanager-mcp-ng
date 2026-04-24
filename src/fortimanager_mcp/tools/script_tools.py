@@ -37,6 +37,30 @@ def _check_script_safety(content: str) -> dict[str, Any] | None:
     return None
 
 
+async def _check_script_execution_safety(
+    client: Any,
+    adom: str,
+    script: str,
+) -> dict[str, Any] | None:
+    """Validate an existing script before execution."""
+    settings = get_settings()
+    if settings.FMG_SCRIPT_SAFETY == "disabled":
+        return None
+
+    try:
+        script_data = await client.get_script(adom=adom, name=script)
+    except Exception as e:
+        return {"error": f"Unable to validate script safety for '{script}': {e}"}
+
+    content = script_data.get("content")
+    if not isinstance(content, str):
+        return {
+            "error": f"Unable to validate script safety for '{script}': script content unavailable."
+        }
+
+    return _check_script_safety(content)
+
+
 # =============================================================================
 # Script CRUD Operations
 # =============================================================================
@@ -288,6 +312,10 @@ async def execute_script_on_device(
         return {"error": "FortiManager client not connected"}
 
     try:
+        safety_error = await _check_script_execution_safety(client, adom, script)
+        if safety_error:
+            return safety_error
+
         # vdom: global means target is a device (not a VDOM)
         scope = [{"name": device, "vdom": "global"}]
         result = await client.execute_script(adom=adom, script=script, scope=scope)
@@ -322,6 +350,10 @@ async def execute_script_on_devices(
         return {"error": "FortiManager client not connected"}
 
     try:
+        safety_error = await _check_script_execution_safety(client, adom, script)
+        if safety_error:
+            return safety_error
+
         scope = [{"name": device, "vdom": "global"} for device in devices]
         result = await client.execute_script(adom=adom, script=script, scope=scope)
         return {
@@ -356,6 +388,10 @@ async def execute_script_on_device_group(
         return {"error": "FortiManager client not connected"}
 
     try:
+        safety_error = await _check_script_execution_safety(client, adom, script)
+        if safety_error:
+            return safety_error
+
         # No vdom attribute means it's a device group
         scope = [{"name": group}]
         result = await client.execute_script(adom=adom, script=script, scope=scope)
@@ -393,6 +429,10 @@ async def execute_script_on_package(
         return {"error": "FortiManager client not connected"}
 
     try:
+        safety_error = await _check_script_execution_safety(client, adom, script)
+        if safety_error:
+            return safety_error
+
         result = await client.execute_script(adom=adom, script=script, package=package)
         return {
             "success": True,

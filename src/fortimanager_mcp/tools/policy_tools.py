@@ -55,6 +55,108 @@ def _check_policy_safety(
     return {"_safety_warning": warning}
 
 
+def _normalize_policy_members(value: Any) -> list[str] | None:
+    """Normalize FMG policy member fields to plain string lists."""
+    if value is None:
+        return None
+
+    if isinstance(value, list):
+        members: list[str] = []
+        for item in value:
+            if isinstance(item, str):
+                members.append(item)
+            elif isinstance(item, dict):
+                name = item.get("name") or item.get("q_origin_key")
+                if name is not None:
+                    members.append(str(name))
+            elif item is not None:
+                members.append(str(item))
+        return members
+
+    if isinstance(value, dict):
+        name = value.get("name") or value.get("q_origin_key")
+        return [str(name)] if name is not None else None
+
+    return [str(value)]
+
+
+def _normalize_policy_action(value: Any) -> str | None:
+    """Normalize FortiManager policy action values for safety checks."""
+    if value is None:
+        return None
+
+    if isinstance(value, bool):
+        return "accept" if value else "deny"
+
+    if isinstance(value, int):
+        if value == 1:
+            return "accept"
+        if value == 0:
+            return "deny"
+
+    action = str(value).strip().lower()
+    if action in {"1", "accept", "allow"}:
+        return "accept"
+    if action in {"0", "deny", "block"}:
+        return "deny"
+    return action
+
+
+async def _check_policy_update_safety(
+    client: Any,
+    adom: str,
+    package: str,
+    policyid: int,
+    srcaddr: list[str] | None,
+    dstaddr: list[str] | None,
+    service: list[str] | None,
+    action: str | None,
+) -> dict[str, Any] | None:
+    """Validate the effective policy state for partial updates."""
+    if not any(field is not None for field in (srcaddr, dstaddr, service, action)):
+        return None
+
+    try:
+        current_policy = await client.get_firewall_policy(adom, package, policyid)
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Unable to validate policy safety before update: {e}",
+        }
+
+    effective_srcaddr = (
+        srcaddr
+        if srcaddr is not None
+        else _normalize_policy_members(current_policy.get("srcaddr"))
+    )
+    effective_dstaddr = (
+        dstaddr
+        if dstaddr is not None
+        else _normalize_policy_members(current_policy.get("dstaddr"))
+    )
+    effective_service = (
+        service
+        if service is not None
+        else _normalize_policy_members(current_policy.get("service"))
+    )
+    effective_action = (
+        action if action is not None else _normalize_policy_action(current_policy.get("action"))
+    )
+
+    if effective_srcaddr is None or effective_dstaddr is None or effective_action is None:
+        return {
+            "status": "error",
+            "message": "Unable to validate policy safety before update: current policy fields are incomplete.",
+        }
+
+    return _check_policy_safety(
+        effective_srcaddr,
+        effective_dstaddr,
+        effective_service,
+        effective_action,
+    )
+
+
 # =============================================================================
 # Policy Package Management
 # =============================================================================
@@ -511,18 +613,24 @@ async def update_firewall_policy(
         ...     srcaddr=["New-Subnet", "Other-Subnet"]
         ... )
     """
-    # Safety check — only when all critical fields are explicitly provided.
-    # For partial updates we can't know existing values without an extra API call.
     safety_warning = None
-    if srcaddr is not None and dstaddr is not None and action is not None:
-        safety_result = _check_policy_safety(srcaddr, dstaddr, service, action)
+    try:
+        client = _get_client()
+
+        safety_result = await _check_policy_update_safety(
+            client,
+            adom,
+            package,
+            policyid,
+            srcaddr,
+            dstaddr,
+            service,
+            action,
+        )
         if safety_result:
             if safety_result.get("status") == "error":
                 return safety_result
             safety_warning = safety_result.get("_safety_warning")
-
-    try:
-        client = _get_client()
 
         data: dict[str, Any] = {}
 
