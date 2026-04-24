@@ -7,8 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1-ng.1] - 2026-04-24
+
+### Merged
+- Integrated upstream `v1.2.1-beta`, including script safety, policy safety, and `parse_fmg_error` consolidation
+
+### Fork
+- Preserved fork-specific packaging, health reporting, dynamic loading fixes, and `LOG_FORMAT=json` support
+
+## [1.2.1-beta] - 2026-04-23
+
+### Fixed
+- Consolidated duplicate `parse_fmg_error` — removed simple version from client.py, now uses the comprehensive version from errors.py
+
+### Added
+- Usage disclaimer in README
+
+## [1.2.0-beta] - 2026-04-23
+
 ### Added
 - **`get_policy_services` tool** — Retrieve services configured on a firewall policy with optional group resolution. Enables automated policy hardening workflows by comparing actual traffic (from FortiAnalyzer) against configured services.
+
+### Security
+- **Script content safety** (`FMG_SCRIPT_SAFETY`) — Blocks dangerous CLI commands (`execute factory-reset`, `reboot`, `shutdown`, `format`, `erase-disk`) in `create_script` and `update_script`. Enabled by default (`strict`), set to `disabled` to override.
+- **Policy permissiveness safety** (`FMG_POLICY_SAFETY`) — Blocks overly permissive firewall policies (srcaddr=all + dstaddr=all + action=accept) in `create_firewall_policy` and `update_firewall_policy`. Modes: `strict` (default, blocks), `warn` (allows with warning), `disabled`.
+- Both safety guardrails are **strict by default** — require explicit env var override to disable.
+- 40 new tests covering all safety validation and tool integration.
 
 ## [0.1.0-beta] - 2026-01-17
 

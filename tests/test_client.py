@@ -4,8 +4,14 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from fortimanager_mcp.api.client import FortiManagerClient, parse_fmg_error
-from fortimanager_mcp.utils.errors import APIError, ConnectionError
+from fortimanager_mcp.api.client import FortiManagerClient
+from fortimanager_mcp.utils.errors import (
+    APIError,
+    ConnectionError,
+    FortiManagerMCPError,
+    PermissionError,
+    parse_fmg_error,
+)
 
 
 class TestClientInitialization:
@@ -139,14 +145,14 @@ class TestErrorHandling:
     def test_parse_fmg_error_known_code(self) -> None:
         """Test parsing known error codes."""
         error = parse_fmg_error(-3, "Not found", "GET /test")
-        assert isinstance(error, APIError)
-        assert "Object not found" in str(error)
+        assert isinstance(error, PermissionError)
+        assert "Permission denied" in str(error)
 
     def test_parse_fmg_error_unknown_code(self) -> None:
         """Test parsing unknown error codes."""
         error = parse_fmg_error(-999, "Unknown error", "GET /test")
         assert isinstance(error, APIError)
-        assert "-999" in str(error)
+        assert "Unknown error" in str(error)
 
     @pytest.mark.asyncio
     async def test_handle_error_response(
@@ -157,7 +163,7 @@ class TestErrorHandling:
         """Test handling error responses from API."""
         mock_fmg_instance.get.return_value = (-3, {"status": {"message": "Not found"}})
 
-        with pytest.raises(APIError) as exc_info:
+        with pytest.raises(FortiManagerMCPError) as exc_info:
             await mock_client.get("/test/url")
 
-        assert "Object not found" in str(exc_info.value)
+        assert "Permission denied" in str(exc_info.value)

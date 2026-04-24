@@ -86,8 +86,8 @@ class TestPolicyCrudTools:
                 name="Test-Policy",
                 srcintf=["port1"],
                 dstintf=["port2"],
-                srcaddr=["all"],
-                dstaddr=["all"],
+                srcaddr=["LAN-Subnet"],
+                dstaddr=["Server-Net"],
                 service=["HTTP"],
                 action="accept",
             )

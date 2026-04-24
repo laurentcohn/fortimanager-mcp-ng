@@ -795,3 +795,96 @@ def validate_filename(filename: str) -> str:
         raise ValidationError(f"Invalid filename: {basename}")
 
     return basename
+
+
+# =============================================================================
+# Script Content Safety
+# =============================================================================
+
+# Dangerous FortiOS CLI commands that must be blocked.
+# FortiOS allows abbreviated commands (e.g., "exec" for "execute"),
+# so patterns handle both forms. Case-insensitive matching.
+DANGEROUS_SCRIPT_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    # Factory reset (with and without hyphen)
+    (re.compile(r"\bexec(?:ute)?\s+factory-?reset\b", re.IGNORECASE), "factory-reset"),
+    (re.compile(r"\bexec(?:ute)?\s+factoryreset\b", re.IGNORECASE), "factoryreset"),
+    # Reboot
+    (re.compile(r"\bexec(?:ute)?\s+reboot\b", re.IGNORECASE), "reboot"),
+    # Shutdown
+    (re.compile(r"\bexec(?:ute)?\s+shutdown\b", re.IGNORECASE), "shutdown"),
+    # Format disk
+    (re.compile(r"\bexec(?:ute)?\s+format\b", re.IGNORECASE), "format"),
+    # Erase disk (with and without hyphen)
+    (re.compile(r"\bexec(?:ute)?\s+erase-?disk\b", re.IGNORECASE), "erase-disk"),
+]
+
+
+def validate_script_content(content: str) -> list[str]:
+    """Check script content for dangerous CLI commands.
+
+    Scans for destructive FortiOS commands that could cause device outages
+    or data loss (factory-reset, reboot, shutdown, format, erase-disk).
+
+    Args:
+        content: Script content (CLI commands) to validate
+
+    Returns:
+        List of matched dangerous command names (empty if safe)
+    """
+    matches = []
+    for pattern, name in DANGEROUS_SCRIPT_PATTERNS:
+        if pattern.search(content):
+            matches.append(name)
+    return matches
+
+
+# =============================================================================
+# Policy Permissiveness Safety
+# =============================================================================
+
+
+def check_policy_permissiveness(
+    srcaddr: list[str] | None,
+    dstaddr: list[str] | None,
+    service: list[str] | None,
+    action: str | None,
+) -> str | None:
+    """Check if a firewall policy is overly permissive.
+
+    Detects policies where srcaddr=all AND dstaddr=all AND action=accept,
+    which allows unrestricted traffic. Distinguishes between "fully open"
+    (service=ALL) and "overly permissive" (specific services but any-to-any).
+
+    Args:
+        srcaddr: Source address list (e.g., ["all"])
+        dstaddr: Destination address list (e.g., ["all"])
+        service: Service list (e.g., ["ALL"])
+        action: Policy action (e.g., "accept")
+
+    Returns:
+        Warning message string if overly permissive, None if acceptable
+    """
+    if action is None or action.lower() != "accept":
+        return None
+
+    def _is_all(addrs: list[str] | None) -> bool:
+        if not addrs:
+            return False
+        return any(a.lower() == "all" for a in addrs)
+
+    if not (_is_all(srcaddr) and _is_all(dstaddr)):
+        return None
+
+    svc_all = service is not None and any(s.upper() == "ALL" for s in service)
+
+    if svc_all:
+        return (
+            "Policy is fully open: srcaddr='all', dstaddr='all', service='ALL', "
+            "action='accept'. This allows all traffic from any source to any "
+            "destination on all ports."
+        )
+
+    return (
+        "Policy is overly permissive: srcaddr='all', dstaddr='all', "
+        "action='accept'. This allows traffic from any source to any destination."
+    )

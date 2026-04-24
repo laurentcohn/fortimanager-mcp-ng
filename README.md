@@ -2,18 +2,19 @@
 
 `fortimanager-mcp-ng` is a maintained fork of [`rstierli/fortimanager-mcp`](https://github.com/rstierli/fortimanager-mcp). It turns the FortiManager JSON-RPC API into an MCP server so Claude Desktop, Claude Code, LM Studio, Open WebUI, and other MCP-compatible clients can manage policy packages, firewall objects, devices, scripts, templates, SD-WAN settings, and ADOM workflows through a structured tool surface.
 
-This project is not affiliated with, endorsed by, or supported by Fortinet. FortiManager is a trademark of Fortinet, Inc.
+This is an independent community project. It is not affiliated with, endorsed by, or supported by Fortinet. FortiManager is a trademark of Fortinet, Inc. This MCP server can create, modify, and delete configurations on FortiManager. Misuse or misconfiguration can impact production networks. Use at your own risk, test in a non-production environment first, and ensure appropriate ADOM permissions are configured.
 
 ## Why this fork exists
 
-This fork keeps the upstream feature set but fixes a few issues that block real use and publishing:
+This fork keeps the upstream feature set and current upstream security fixes, while preserving the fork-specific packaging and runtime improvements needed for reliable operation:
 
 - publishable package name and CLI entrypoint: `fortimanager-mcp-ng`
-- dynamic tool execution fixed so tool modules load correctly on demand
-- HTTP `/health` now reports the real FMG connection state and returns `503` if disconnected
+- dynamic tool execution fixed so on-demand module loading works correctly
+- HTTP `/health` reports the real FMG connection state and returns `503` if disconnected
 - logging setup accepts `LOG_FORMAT=json` cleanly
-- packaging fixed so editable installs and wheel builds work after renaming the distribution
-- version metadata aligned between package files
+- packaging remains fixed for editable installs and wheel builds after renaming the distribution
+- upstream script and policy safety guardrails are included
+- upstream error-handling consolidation is included
 
 ## Feature overview
 
@@ -23,6 +24,7 @@ This fork keeps the upstream feature set but fixes a few issues that block real 
 - CLI script creation, execution, and result retrieval
 - template and SD-WAN management helpers
 - ADOM and workspace-lock operations
+- built-in safety guardrails for dangerous scripts and overly permissive policies
 - stdio mode for desktop MCP clients and HTTP mode for container or gateway deployments
 
 ## Requirements
@@ -97,7 +99,7 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
-The included compose setup exposes port `8000`, mounts `./logs` and `./output`, and enables file output inside `/app/output`.
+The bundled compose setup exposes port `8000`, mounts `./logs` and `./output`, and enables file output inside `/app/output`.
 
 ## Configuration
 
@@ -121,6 +123,8 @@ Important settings:
 | `MCP_AUTH_TOKEN` | no | Bearer token for HTTP mode |
 | `MCP_ALLOWED_HOSTS` | no | JSON array of allowed reverse-proxy host headers |
 | `FMG_ALLOWED_OUTPUT_DIRS` | no | Comma-separated allowlist for file-writing tools |
+| `FMG_SCRIPT_SAFETY` | no | `strict` or `disabled` for dangerous CLI command blocking |
+| `FMG_POLICY_SAFETY` | no | `strict`, `warn`, or `disabled` for permissive policy blocking |
 
 ### Tool modes
 
@@ -130,6 +134,36 @@ Important settings:
 | `dynamic` | discovery surface plus on-demand execution | useful when context budget matters |
 
 Dynamic mode is fixed in this fork. If you want the most straightforward behavior, keep `FMG_TOOL_MODE=full`.
+
+### Safety guardrails
+
+The current upstream safety guardrails are integrated in this fork and are enabled by default.
+
+#### Script content safety
+
+`FMG_SCRIPT_SAFETY=strict` blocks dangerous CLI commands such as:
+
+- `execute factory-reset`
+- `execute reboot`
+- `execute shutdown`
+- `execute format`
+- `execute erase-disk`
+
+Set `FMG_SCRIPT_SAFETY=disabled` only if you explicitly want to allow such commands.
+
+#### Policy permissiveness safety
+
+`FMG_POLICY_SAFETY=strict` blocks overly permissive firewall policies where:
+
+- `srcaddr=all`
+- `dstaddr=all`
+- `action=accept`
+
+Available modes:
+
+- `strict`: block the operation
+- `warn`: allow it, but return a warning
+- `disabled`: allow it without guardrails
 
 ### File output security
 
@@ -254,22 +288,14 @@ DEFAULT_ADOM=root \
 pytest -m "not integration"
 ```
 
-Current fork status:
+Current validated fork status:
 
-- `270 passed`
+- `312 passed`
 - `39 deselected`
 
-## What changed compared with upstream
-
-- dynamic execution now imports the correct tool modules at runtime
-- health reporting is accurate for both MCP and HTTP surfaces
-- packaging and install metadata work under the renamed `-ng` distribution
-- logging config is more robust in local and CI environments
-
-## Upstream, license, and support
+## Upstream, versioning, and support
 
 - upstream project: [`rstierli/fortimanager-mcp`](https://github.com/rstierli/fortimanager-mcp)
-- this fork started from upstream commit `78ac3d3`
+- current upstream base integrated in this fork: `v1.2.1-beta`
+- fork package version tracks the integrated upstream line with an `-ng` suffix
 - license: [MIT](LICENSE)
-
-Small, reviewable fixes are intentional so cherry-picking changes upstream remains easy.

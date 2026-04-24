@@ -132,6 +132,21 @@ class Settings(BaseSettings):
         "Example: FMG_ALLOWED_OUTPUT_DIRS=~/Downloads",
     )
 
+    # Script Safety
+    FMG_SCRIPT_SAFETY: Literal["strict", "disabled"] = Field(
+        default="strict",
+        description="Script content safety mode. 'strict' blocks dangerous CLI commands "
+        "(factory-reset, reboot, shutdown, format). 'disabled' allows all commands.",
+    )
+
+    # Policy Safety
+    FMG_POLICY_SAFETY: Literal["strict", "warn", "disabled"] = Field(
+        default="strict",
+        description="Policy permissiveness safety mode. 'strict' blocks overly permissive "
+        "policies (srcaddr=all + dstaddr=all + action=accept). 'warn' allows but returns "
+        "a warning. 'disabled' allows all policies.",
+    )
+
     # Testing Configuration
     TEST_ADOM: str = Field(
         default="root",

@@ -6,10 +6,36 @@ Scripts can target device database, ADOM database, or remote devices.
 Based on FNDN FortiManager 7.6.5 API specifications.
 """
 
+import logging
 from typing import Any
 
 from fortimanager_mcp.server import get_fmg_client, mcp
-from fortimanager_mcp.utils.config import get_default_adom
+from fortimanager_mcp.utils.config import get_default_adom, get_settings
+from fortimanager_mcp.utils.validation import validate_script_content
+
+logger = logging.getLogger(__name__)
+
+
+def _check_script_safety(content: str) -> dict[str, Any] | None:
+    """Check script content for dangerous commands based on safety config.
+
+    Returns error dict if blocked, None if OK.
+    """
+    settings = get_settings()
+    if settings.FMG_SCRIPT_SAFETY == "disabled":
+        return None
+
+    matches = validate_script_content(content)
+    if matches:
+        blocked = ", ".join(matches)
+        logger.warning(f"Script blocked — dangerous commands detected: {blocked}")
+        return {
+            "error": f"Script contains dangerous commands: {blocked}. "
+            "These commands can cause device outages or data loss. "
+            "Set FMG_SCRIPT_SAFETY=disabled to override.",
+        }
+    return None
+
 
 # =============================================================================
 # Script CRUD Operations
@@ -117,6 +143,11 @@ async def create_script(
     Returns:
         Created script details
     """
+    # Safety check before creating
+    safety_error = _check_script_safety(content)
+    if safety_error:
+        return safety_error
+
     client = get_fmg_client()
     if not client:
         return {"error": "FortiManager client not connected"}
@@ -163,6 +194,12 @@ async def update_script(
     Returns:
         Updated script details
     """
+    # Safety check if content is being updated
+    if content is not None:
+        safety_error = _check_script_safety(content)
+        if safety_error:
+            return safety_error
+
     client = get_fmg_client()
     if not client:
         return {"error": "FortiManager client not connected"}
